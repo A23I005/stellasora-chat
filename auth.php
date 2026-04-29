@@ -1,22 +1,39 @@
 <?php
+/**
+ * auth.php - Google OAuth2 認証処理 & ログイン画面
+ * * このファイルでは、Google APIを使用した認証と通常のフォームログインを行います。
+ * クライアントIDやシークレットなどの機密情報は .env ファイルから読み込みます。
+ */
+
 session_start();
 
-// --- データベース接続 ---
+// --- 1. .envファイルを読み込む ---
+$env_path = __DIR__ . '/.env';
+if (!file_exists($env_path)) {
+    die('.env file not found. Please create one based on .env.example');
+}
+$env = parse_ini_file($env_path);
+
+// --- 2. Google API 設定 (環境変数から取得) ---
+define('GOOGLE_CLIENT_ID', $env['GOOGLE_CLIENT_ID'] ?? '');
+define('GOOGLE_CLIENT_SECRET', $env['GOOGLE_CLIENT_SECRET'] ?? '');
+define('REDIRECT_URI', $env['GOOGLE_REDIRECT_URI'] ?? 'http://localhost/stellasora-chat/auth.php');
+
+// 設定が空の場合は警告を表示
+if (empty(GOOGLE_CLIENT_ID) || empty(GOOGLE_CLIENT_SECRET)) {
+    die('Google API configuration is missing in .env');
+}
+
+// --- 3. データベース接続 ---
 $dsn = 'mysql:dbname=stellasora_db;host=localhost;charset=utf8';
 $user = 'root'; 
 $password = '';
 try { 
     $dbh = new PDO($dsn, $user, $password); 
-    // エラーを表示する設定
     $dbh->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 } catch (PDOException $e) { 
     exit("接続失敗: " . $e->getMessage()); 
 }
-
-// --- Google API 設定 ---
-define('GOOGLE_CLIENT_ID', '356825216115-rip011ujbpurh2a496u5fjcqmlmolotj.apps.googleusercontent.com');
-define('GOOGLE_CLIENT_SECRET', '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');
-define('REDIRECT_URI', 'http://localhost/stellasora-chat/auth.php');
 
 $error = "";
 
@@ -25,7 +42,7 @@ if (!isset($_SESSION['oauth_state'])) {
     $_SESSION['oauth_state'] = bin2hex(random_bytes(16));
 }
 
-// --- Googleログイン処理 (リダイレクト戻り時) ---
+// --- 4. Googleログイン処理 (リダイレクト戻り時) ---
 if (isset($_GET['code'])) {
     // stateの検証
     if (!isset($_GET['state']) || $_GET['state'] !== $_SESSION['oauth_state']) {
@@ -79,7 +96,7 @@ if (isset($_GET['code'])) {
     }
 }
 
-// --- 通常ログイン処理 (フォーム送信時) ---
+// --- 5. 通常ログイン処理 (フォーム送信時) ---
 if (isset($_POST['login'])) {
     $stmt = $dbh->prepare("SELECT * FROM users WHERE email = ?");
     $stmt->execute([$_POST['email']]);
@@ -94,7 +111,7 @@ if (isset($_POST['login'])) {
     }
 }
 
-// ログアウト処理
+// 6. ログアウト処理
 if (isset($_GET['action']) && $_GET['action'] === 'logout') {
     session_destroy(); 
     header('Location: auth.php'); 
@@ -113,42 +130,22 @@ $google_url = "https://accounts.google.com/o/oauth2/auth?client_id=" . GOOGLE_CL
     <style>
         body { background: #e9eef2; font-family: "Helvetica Neue", Arial, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
         .auth-box { background: white; padding: 40px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); width: 320px; text-align: center; }
-        
-        /* Googleボタン */
         .btn-google {
-            background-color: #fff;
-            color: #757575;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            padding: 1px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            text-decoration: none;
-            font-size: 14px;
-            margin-bottom: 25px;
-            transition: background-color .2s, box-shadow .2s;
-            width: 100%;
-            box-sizing: border-box;
+            background-color: #fff; color: #757575; border: 1px solid #ddd; border-radius: 4px; padding: 1px;
+            cursor: pointer; display: flex; align-items: center; text-decoration: none; font-size: 14px;
+            margin-bottom: 25px; transition: background-color .2s, box-shadow .2s; width: 100%; box-sizing: border-box;
         }
         .btn-google:hover { background-color: #fafafa; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         .google-icon-wrapper { background-color: #fff; padding: 10px; display: flex; align-items: center; justify-content: center; }
         .google-icon { width: 18px !important; height: 18px !important; display: block; }
         .btn-google-text { padding-left: 10px; font-weight: 500; }
-
-        /* 入力フォーム */
         input { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; font-size: 14px; }
         .btn-main { background: #007bff; color: white; border: none; padding: 12px; border-radius: 6px; cursor: pointer; width: 100%; font-weight: bold; font-size: 16px; margin-top: 15px; }
-        
-        /* 区切り線 */
         .divider { font-size: 0.8em; color: #888; position: relative; margin-bottom: 20px; margin-top: 10px; }
         .divider::before { content: ""; position: absolute; top: 50%; left: 0; width: 100%; border-top: 1px solid #eee; z-index: 0; }
         .divider span { background: white; padding: 0 10px; position: relative; z-index: 1; }
-
-        /* 新規登録リンク */
         .signup-link { margin-top: 25px; font-size: 0.85em; color: #666; }
         .signup-link a { color: #007bff; text-decoration: none; font-weight: bold; }
-        .signup-link a:hover { text-decoration: underline; }
     </style>
 </head>
 <body>
